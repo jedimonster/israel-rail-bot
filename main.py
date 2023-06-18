@@ -23,12 +23,10 @@ if __name__ == '__main__':
     schedule_train_notification('427475755', '7320', '4600', '07:41', 'sun', 11, 00)
     schedule_train_notification('427475755', '4600', '7320', '16:45', 'sun', 16, 15)
     schedule_train_notification('427475755', '4600', '7320', '16:45', 'sun', 16, 29)
-    schedule_train_notification('427475755', '4600', '7320', '17:15', 'sun', 16, 15)
 
     schedule_train_notification('427475755', '7320', '4600', '07:28', 'mon', 7, 00)
-    schedule_train_notification('427475755', '7320', '4600', '07:41', 'mon', 11, 00)
+    schedule_train_notification('427475755', '7320', '4600', '07:41', 'mon', 7, 00)
     schedule_train_notification('427475755', '4600', '7320', '16:45', 'mon', 16, 15)
     schedule_train_notification('427475755', '4600', '7320', '16:45', 'mon', 16, 29)
-    schedule_train_notification('427475755', '4600', '7320', '17:15', 'mon', 16, 15)
 
     start_bot(TELEGRAM_BOT_TOKEN)
