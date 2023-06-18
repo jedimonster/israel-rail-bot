@@ -1,12 +1,13 @@
 import datetime
 import logging
+import os
 from datetime import date
 import requests
 from dateutil.parser import parse
 
 RAIL_API_ENDPOINT = 'https://israelrail.azurefd.net/rjpa-prod/api/v1/timetable/searchTrainLuzForDateTime?fromStation={from_station}&toStation={to_station}&date' \
                     '={day}&hour={hour}&scheduleType=1&systemType=1&language"id"="hebrew"'
-RAIL_API_KEY = '4b0d355121fe4e0bb3d86e902efe9f20'
+RAIL_API_KEY = os.environ['RAIL_TOKEN']
 
 
 def get_train_times(departure_station, arrival_station):

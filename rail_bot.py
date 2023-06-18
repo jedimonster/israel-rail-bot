@@ -20,9 +20,7 @@ SELECT_ARRIVAL_STATION = 'c_1'
 SELECT_DEPARTURE_TIME = 'c_2'
 CHECK_DELAYS_FOR_SPECIFIC_TIME = 'c_3'
 
-TELEGRAM_BOT_TOKEN = '6225246636:AAG842217K8ILQJ5Pg_RHWXf8VcuSdv8NhQ'
-
-bot = Bot(TELEGRAM_BOT_TOKEN)
+bot = None
 
 
 def next_state_is(state):
@@ -33,8 +31,10 @@ def next_state_is(state):
     return is_state
 
 
-def start_bot():
-    application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+def start_bot(token):
+    global bot
+    bot = Bot(token)
+    application = ApplicationBuilder().token(token).build()
     application.add_handler(CommandHandler("check_specific_train", select_departure_station))
     application.add_handler(
         CallbackQueryHandler(select_arrival_station, next_state_is(SELECT_ARRIVAL_STATION), block=False))

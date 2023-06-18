@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 from notification_scheduler import schedule_train_notification, await_termination
@@ -7,8 +8,7 @@ from train_facade import get_train_times, get_delay_from_api
 
 # https://israelrail.azurefd.net/rjpa-prod/api/v1/timetable/searchTrainLuzForDateTime?fromStation=4600&toStation=7300&date=2023-05-23&hour=16:30&scheduleType=1&systemType=1&language"id"="hebrew"
 
-TELEGRAM_BOT_TOKEN = '6225246636:AAG842217K8ILQJ5Pg_RHWXf8VcuSdv8NhQ'
-RAIL_API_KEY = '4b0d355121fe4e0bb3d86e902efe9f20'
+TELEGRAM_BOT_TOKEN = os.environ['TELEGRAM_TOKEN']
 
 LOG_FORMAT = '%(asctime)s %(levelname)s %(message)s'
 
@@ -31,6 +31,4 @@ if __name__ == '__main__':
     schedule_train_notification('427475755', '4600', '7320', '16:45', 'mon', 16, 29)
     schedule_train_notification('427475755', '4600', '7320', '17:15', 'mon', 16, 15)
 
-
-
-    start_bot()
+    start_bot(TELEGRAM_BOT_TOKEN)
