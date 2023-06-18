@@ -6,7 +6,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from rail_bot import send_status_notification
 
 # scheduler = AsyncIOScheduler(jobstores={'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')})
-scheduler = AsyncIOScheduler(jobstores={'default': SQLAlchemyJobStore(url='sqlite:///:memory:')})
+scheduler = AsyncIOScheduler(jobstores={'default': SQLAlchemyJobStore(url='sqlite:///:memory:')},
+                             timezone='UTC')
 scheduler.start()
 
 
@@ -19,12 +20,10 @@ async def send_notification_for_specific_train_user(chat_id: str, from_station: 
 def schedule_train_notification(chat_id: str, from_station: str, to_station: str, train_time: str,
                                 day_of_week: str,
                                 notification_hour: int, notification_minute: int):
-
     context = {'chat_id': chat_id, 'from_station': from_station, 'to_station': to_station, 'train_time': train_time}
 
     job = scheduler.add_job(send_notification_for_specific_train_user, 'cron', day_of_week=day_of_week,
                             hour=notification_hour, minute=notification_minute, kwargs=context)
-
 
     logging.info("Scheduled job %s", job)
     return job
