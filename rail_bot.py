@@ -92,11 +92,13 @@ async def select_arrival_station(update: Update, context: ContextTypes.DEFAULT_T
     return "stations_selected"
 
 
-def format_time(t, show_day=True):
+def format_time_from_str(t, show_day=True):
     request_time = dateutil.parser.isoparse(t)
-    today = date.today()
-    # datetime.strptime(t, '%Y-m-dT')
 
+    return format_time(request_time, show_day)
+
+
+def format_time(request_time, show_day=True):
     natural_date = humanize.naturalday(request_time)
     absolute_time = datetime.strftime(request_time, '%H:%M')
     if show_day:
@@ -120,7 +122,7 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
 
     buttons = [
         [InlineKeyboardButton(
-            "{dep} (arrive {arr})".format(dep=format_time(dep), arr=format_time(arr, show_day=False)).capitalize(),
+            "{dep} (arrive {arr})".format(dep=format_time_from_str(dep), arr=format_time_from_str(arr, show_day=False)).capitalize(),
             callback_data=json.dumps({'ns': CHECK_DELAYS_FOR_SPECIFIC_TIME, 'time': dep}))]
         for dep, arr in times]
 
@@ -148,10 +150,10 @@ async def check_delays_for_specific_time(update: Update, context: ContextTypes.D
 
     logging.info("Checking delay from %s to %s on %s", departure_station_id, arrival_station_id, selected_time)
 
-    delay = get_delay_from_api(departure_station_id,
-                               arrival_station_id, selected_time)
+    train_times = get_delay_from_api(departure_station_id,
+                                     arrival_station_id, selected_time)
 
-    response_txt = format_delay_response(delay, selected_time, departure_station_id, arrival_station_id)
+    response_txt = format_delay_response(train_times, selected_time, departure_station_id, arrival_station_id)
 
     if to_user is None:
         await query.message.edit_text(response_txt, parse_mode='markdown')
@@ -161,22 +163,29 @@ async def check_delays_for_specific_time(update: Update, context: ContextTypes.D
     return ConversationHandler.END
 
 
-def format_delay_response(delay, selected_time, departure_station_id, arrival_station_id):
+def format_delay_response(train_times, selected_time, departure_station_id, arrival_station_id):
     departure_station_name = next(filter(lambda s: s['id'] == departure_station_id, TRAIN_STATIONS))['english']
     arrival_station_name = next(filter(lambda s: s['id'] == arrival_station_id, TRAIN_STATIONS))['english']
-    delay_str = 'is ✅ on time'
     last_update_str = '(updated {})'.format(datetime.strftime(datetime.now(), '%H:%M'))
-    if delay is not None:
-        delay_str = "is ⏱️ {delay} minutes late".format(delay=str(delay))
-    resposne_txt = "Train from *{departure_station}* to *{arrival_station}* *{time}* {delay} {last_update}.".format(
+    if train_times.delay_in_minutes > 0:
+        # delay_str = "is ⏱️ {delay} minutes late".format(delay=str(train_times))
+        departure_str = '️⏱️ {}'.format(format_time(train_times.get_updated_departure()))
+        arrival_str = '~{}~ ⏱️ {}'.format(format_time_from_str(train_times.original_arrival, False),
+                                          format_time(train_times.get_updated_departure(), False))
+    else:
+        departure_str = '✅ {}'.format(format_time(train_times.get_updated_departure()))
+        arrival_str = format_time_from_str(train_times.original_arrival)
+    resposne_txt = "Train from *{departure_station}* to *{arrival_station}*. \n" \
+                   "*Departing* *{departure_str}* \n" \
+                   "*Arriving* *{arrival_str}* {last_update}.".format(
         departure_station=departure_station_name, arrival_station=arrival_station_name,
-        time=format_time(selected_time), delay=delay_str, last_update=last_update_str)
+        departure_str=departure_str, arrival_str=arrival_str, last_update=last_update_str)
     return resposne_txt
 
 
 async def send_status_notification(chat_id, from_station, to_station, train_hour: str):
     hour, minute = map(int, train_hour.split(':'))
     train_datetime = datetime.now().replace(hour=hour, minute=minute).isoformat()
-    train_delay = get_delay_from_api(from_station, to_station, train_hour)
-    response_txt = format_delay_response(train_delay, train_datetime, from_station, to_station)
+    train_times = get_delay_from_api(from_station, to_station, train_hour)
+    response_txt = format_delay_response(train_times, train_datetime, from_station, to_station)
     await bot.send_message(chat_id, response_txt, parse_mode='markdown')

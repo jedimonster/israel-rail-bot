@@ -29,23 +29,40 @@ def get_timetable(departure_station, arrival_station, day, hour):
     return res
 
 
-def get_delay_from_api(from_station, to_station, hour):
+class TrainTimes:
+    def __init__(self, original_departure, original_arrival, delay_in_minutes):
+        self.original_departure = original_departure
+        self.original_arrival = original_arrival
+        self.delay_in_minutes = delay_in_minutes
+
+    def get_updated_departure(self):
+        return parse(self.original_departure) + datetime.timedelta(minutes=self.delay_in_minutes)
+
+    def get_updated_arrival(self):
+        return parse(self.original_arrival) + datetime.timedelta(minutes=self.delay_in_minutes)
+
+
+def get_delay_from_api(from_station, to_station, hour) -> TrainTimes:
     day = date.today()
-    res = get_timetable(from_station, to_station, day, '07:00')
-    for travel in res['result']['travels']:
+    timetable = get_timetable(from_station, to_station, day, '07:00')
+    for travel in timetable['result']['travels']:
         scheduled_departure = travel['departureTime']
         if scheduled_departure != hour:
             continue
 
         train_position = travel['trains'][0]['trainPosition']
+        original_departure = travel['departureTime']
+        original_arrival = travel['arrivalTime']
+
         if train_position is None:
             logging.info('No info for train departing at {departure}'.format(departure=scheduled_departure))
-            continue
+            return TrainTimes(original_departure, original_arrival, 0)
 
         train_delay = train_position['calcDiffMinutes']
-        updated_departure = parse(scheduled_departure) + datetime.timedelta(minutes=train_delay)
+
+        train_times = TrainTimes(hour, original_arrival, train_delay)
         logging.debug('Original Departure: {origDep}, delay: {delay}, updated departure: {updated_departure}'.format(
-            origDep=scheduled_departure, delay=train_delay, updated_departure=updated_departure))
+            origDep=scheduled_departure, delay=train_delay, updated_departure=train_times.get_updated_departure()))
 
         if train_delay > 0:
-            return train_delay
+            return train_times

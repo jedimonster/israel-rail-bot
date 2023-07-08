@@ -7,7 +7,7 @@ from rail_bot import send_status_notification
 
 # scheduler = AsyncIOScheduler(jobstores={'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')})
 scheduler = AsyncIOScheduler(jobstores={'default': SQLAlchemyJobStore(url='sqlite:///:memory:')},
-                             timezone='UTC')
+                             timezone='Israel')
 scheduler.start()
 
 
