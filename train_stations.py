@@ -4,12 +4,12 @@ TRAIN_STATIONS = [
         "hebrew": "תל אביב - סבידור מרכז",
         "english": "Tel Aviv - Savidor Center",
     },
-    #     {
-    #         "id": "3500",
-    #         "hebrew": "הרצליה",
-    #         "english": "Herzliya",
-    #
-    #     },
+    {
+        "id": "3500",
+        "hebrew": "הרצליה",
+        "english": "Herzliya",
+
+    },
     #     {
     #         "id": "3400",
     #         "hebrew": "בית יהושע",
