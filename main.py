@@ -1,10 +1,8 @@
 import logging
 import os
-import time
 
-from notification_scheduler import schedule_train_notification, await_termination
+from notification_scheduler import schedule_train_notification
 from rail_bot import start_bot
-from train_facade import get_train_times, get_delay_from_api
 
 # https://israelrail.azurefd.net/rjpa-prod/api/v1/timetable/searchTrainLuzForDateTime?fromStation=4600&toStation=7300&date=2023-05-23&hour=16:30&scheduleType=1&systemType=1&language"id"="hebrew"
 

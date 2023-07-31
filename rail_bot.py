@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import date
 from datetime import datetime
+from itertools import groupby
 
 import dateutil
 import humanize
@@ -107,6 +108,21 @@ def format_time(request_time, show_day=True):
         return absolute_time
 
 
+def fmt_interval(dep, arr):
+    delta = dateutil.parser.isoparse(arr) - dateutil.parser.isoparse(dep)
+
+    m = int(delta.seconds / 60)
+    if (m >= 60):
+        h = int(m / 60)
+        m = m % 60
+    else:
+        h = 0
+    if (h == 0):
+        return "{m}m".format(m=m)
+    else:
+        return "{h}h:{m}m".format(h=h, m=m)
+
+
 async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info("Got select_arrival_station command from user=%s, context=%s, chat_id=%s", update.effective_user,
                  context.chat_data, update.effective_chat.id)
@@ -117,14 +133,31 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
     context.chat_data['arrival_station_id'] = selected_station_id
     departure_station_id = context.chat_data['departure_station_id']
 
-    times = get_train_times(context.chat_data['departure_station_id'],
-                            context.chat_data['arrival_station_id'])
+    all_times = get_train_times(context.chat_data['departure_station_id'],
+                                context.chat_data['arrival_station_id'])
+    now = datetime.now()
 
-    buttons = [
-        [InlineKeyboardButton(
-            "{dep} (arrive {arr})".format(dep=format_time_from_str(dep), arr=format_time_from_str(arr, show_day=False)).capitalize(),
-            callback_data=json.dumps({'ns': CHECK_DELAYS_FOR_SPECIFIC_TIME, 'time': dep}))]
-        for dep, arr in times]
+    def is_applicable_time(time):
+        (dep, arr) = time
+        return dateutil.parser.isoparse(arr) > now
+
+    future_times = list(filter(is_applicable_time,
+                               all_times))
+
+    time_by_hour_iter = groupby(future_times, lambda time: (
+        dateutil.parser.isoparse(time[0]).hour))
+
+    time_by_hour = []
+
+    for hour, hourtimes in time_by_hour_iter:
+        time_by_hour.append(list(hourtimes))
+
+    buttons = [[
+        InlineKeyboardButton(
+            "{dep} ({duration})".format(dep=format_time_from_str(dep, show_day=False),
+                                      duration=fmt_interval(dep, arr)).capitalize(),
+            callback_data=json.dumps({'ns': CHECK_DELAYS_FOR_SPECIFIC_TIME, 'time': dep}))
+        for dep, arr in times] for times in time_by_hour]
 
     reply_markup = InlineKeyboardMarkup(buttons)
     departure_station_name = next(filter(lambda s: s['id'] == departure_station_id, TRAIN_STATIONS))['english']
