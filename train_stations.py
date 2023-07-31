@@ -94,12 +94,12 @@ TRAIN_STATIONS = [
     #         "english": "Nahariya",
     #
     #     },
-    #     {
-    #         "id": "6300",
-    #         "hebrew": "בית שמש",
-    #         "english": "Bet Shemesh",
-    #
-    #     },
+        {
+            "id": "6300",
+            "hebrew": "בית שמש",
+            "english": "Bet Shemesh",
+
+        },
     #     {
     #         "id": "7000",
     #         "hebrew": "קריית גת",
