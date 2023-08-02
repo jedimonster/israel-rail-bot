@@ -64,5 +64,4 @@ def get_delay_from_api(from_station, to_station, hour) -> TrainTimes:
         logging.debug('Original Departure: {origDep}, delay: {delay}, updated departure: {updated_departure}'.format(
             origDep=scheduled_departure, delay=train_delay, updated_departure=train_times.get_updated_departure()))
 
-        if train_delay > 0:
-            return train_times
+        return train_times
