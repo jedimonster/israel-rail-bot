@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 requests = "*"
 python-telegram-bot = "*"
+"python-telegram-bot[callback-data]" = "*"
 humanize = "*"
 apscheduler = "*"
 python-dateutil = "*"
