@@ -66,6 +66,9 @@ def start_bot(token):
     application.add_handler(
         CallbackQueryHandler(check_delays_for_specific_time, next_state_is(CHECK_DELAYS_FOR_SPECIFIC_TIME),
                              block=False))
+    application.add_handler(
+        CallbackQueryHandler(check_delays_for_specific_time, next_state_is(REFRESH),
+                             block=False))
 
     application.run_polling()
 
@@ -233,8 +236,6 @@ async def check_delays_for_specific_time(update: Update, context: ContextTypes.D
               {NEXT_STATE: SUBSCRIBE_TO_SPECIFIC, FROM_STATION_KEY: departure_station_id,
                TO_STATION_KEY: arrival_station_id, TIME_KEY: selected_time}))]])
 
-    # reply_markup = callback_data_cache.process_keyboard(reply_markup)
-
     response_txt = format_delay_response(train_times, selected_time, departure_station_id, arrival_station_id)
 
     if to_user is None:
@@ -250,7 +251,7 @@ def format_delay_response(train_times, selected_time, departure_station_id, arri
         '-', '\-')
     arrival_station_name = next(filter(lambda s: s['id'] == arrival_station_id, TRAIN_STATIONS))['english'].replace('-',
                                                                                                                     '\-')
-    last_update_str = '(updated {})'.format(datetime.strftime(datetime.now(), '%H:%M'))
+    last_update_str = '\(updated {}\)'.format(datetime.strftime(datetime.now(), '%H:%M'))
     if train_times.delay_in_minutes > 0:
         # delay_str = "is ⏱️ {delay} minutes late".format(delay=str(train_times))
         departure_str = '️️~{}~ ⏱ {}'.format(format_time_from_str(train_times.original_departure),
@@ -260,9 +261,9 @@ def format_delay_response(train_times, selected_time, departure_station_id, arri
         departure_str = '✅ {}'.format(format_time(train_times.get_updated_departure()))
         arrival_str = format_time_from_str(train_times.original_arrival, False)
     resposne_txt = "Train from {departure_station} to {arrival_station} " \
-                   "Departing *{departure_str}* will arrive at {arrival_str}\.".format(
+                   "Departing *{departure_str}* will arrive at {arrival_str} {updated}\.".format(
         departure_station=departure_station_name, arrival_station=arrival_station_name,
-        departure_str=departure_str, arrival_str=arrival_str)
+        departure_str=departure_str, arrival_str=arrival_str, updated=last_update_str)
     return resposne_txt
 
 
