@@ -43,8 +43,10 @@ class TrainTimes:
 
 
 def get_delay_from_api(from_station, to_station, hour) -> TrainTimes:
+    logging.info("Checking for delays for train from {} to {} at {} today".format(from_station, to_station, hour))
     day = date.today()
     timetable = get_timetable(from_station, to_station, day, '07:00')
+    logging.info("Got timetable " + str(timetable))
     for travel in timetable['result']['travels']:
         scheduled_departure = travel['departureTime']
         if scheduled_departure != hour:

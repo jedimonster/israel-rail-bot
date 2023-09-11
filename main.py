@@ -15,7 +15,6 @@ if __name__ == '__main__':
     logging.info("Starting")
 
     # My user id 427475755
-    # delay = get_delay_from_api('7320', '4600', '07:28')
 
     schedule_train_notification('427475755', '7320', '4600', '07:28', 'mon', 7, 00)
     schedule_train_notification('427475755', '7320', '4600', '07:41', 'mon', 7, 00)

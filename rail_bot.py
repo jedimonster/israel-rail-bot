@@ -48,15 +48,11 @@ async def bot_error_handler(update: Optional[object], context: CallbackContext):
     logging.error("Exception while handling an update:", exc_info=context.error)
     if update is not None:
         await update.effective_message.edit_text("Sorry, something went wrong.")
-        # await update.effective_message.reply_text("Sorry, something went wrong.")
 
 
 def start_bot(token):
     global bot, callback_data_cache
     bot = ExtBot(token)
-    # await bot.initialize()
-    # callback_data_cache = CallbackDataCache(bot)
-    # callback_data_cache = bot.callback_data_cache
     application = ApplicationBuilder().arbitrary_callback_data(True).token(token).build()
 
     application.add_error_handler(bot_error_handler)
@@ -271,7 +267,6 @@ def format_delay_response(train_times, selected_time, departure_station_id, arri
                                                                                                                     '\-')
     last_update_str = '\(updated {}\)'.format(datetime.strftime(datetime.now(), '%H:%M'))
     if train_times.delay_in_minutes > 0:
-        # delay_str = "is ⏱️ {delay} minutes late".format(delay=str(train_times))
         departure_str = '️️~{}~ ⏱ {}'.format(format_time_from_str(train_times.original_departure),
                                              format_time(train_times.get_updated_departure(), False))
         arrival_str = '{}'.format(format_time(train_times.get_updated_arrival(), False))
@@ -287,7 +282,8 @@ def format_delay_response(train_times, selected_time, departure_station_id, arri
 
 async def send_status_notification(chat_id, from_station, to_station, train_hour: str):
     hour, minute = map(int, train_hour.split(':'))
-    train_datetime = datetime.now().replace(hour=hour, minute=minute).isoformat()
-    train_times = get_delay_from_api(from_station, to_station, train_hour)
+    train_datetime = datetime.now().replace(hour=hour, minute=minute, second=0).isoformat(timespec='seconds')
+    train_times = get_delay_from_api(from_station, to_station, train_datetime)
     response_txt = format_delay_response(train_times, train_datetime, from_station, to_station)
-    await bot.send_message(chat_id, response_txt, parse_mode='markdown')
+    logging.info("Sending delay notification to chat_id " + chat_id)
+    await bot.send_message(chat_id, response_txt, parse_mode='MarkdownV2')
