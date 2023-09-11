@@ -17,7 +17,6 @@ from train_stations import TRAIN_STATIONS
 
 FROM_STATION_KEY = 'from_station'
 TO_STATION_KEY = 'to_station'
-SELECTED_STATION_KEY = 'selected_station'
 TIME_KEY = 'time'
 
 SELECTED_ID = 'si'
@@ -28,6 +27,10 @@ SELECT_DEPARTURE_TIME = 'c2'
 CHECK_DELAYS_FOR_SPECIFIC_TIME = 'c3'
 REFRESH = 'c4'
 SUBSCRIBE_TO_SPECIFIC = 'c5'
+
+SELECT_TRAIN_VARIANT_KEY = 'train_variant'
+SELECT_TRAIN_VARIANT_IN_FLIGHT = 'in_flight'
+SELECT_TRAIN_VARIANT_FUTURE = 'future'
 
 bot = None
 callback_data_cache: CallbackDataCache | None = None
@@ -58,7 +61,7 @@ def start_bot(token):
 
     application.add_error_handler(bot_error_handler)
 
-    application.add_handler(CommandHandler("check_specific_train", select_departure_station))
+    application.add_handler(CommandHandler("check_specific_train", check_specific_train))
     application.add_handler(
         CallbackQueryHandler(select_arrival_station, next_state_is(SELECT_ARRIVAL_STATION), block=False))
     application.add_handler(
@@ -66,6 +69,7 @@ def start_bot(token):
     application.add_handler(
         CallbackQueryHandler(check_delays_for_specific_time, next_state_is(CHECK_DELAYS_FOR_SPECIFIC_TIME),
                              block=False))
+    application.add_handler(CommandHandler("check_in_flight_train", check_in_flight_train))
     application.add_handler(
         CallbackQueryHandler(check_delays_for_specific_time, next_state_is(REFRESH),
                              block=False))
@@ -73,12 +77,22 @@ def start_bot(token):
     application.run_polling()
 
 
-async def select_departure_station(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def check_in_flight_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await show_deparature_buttons(update, context, {SELECT_TRAIN_VARIANT_KEY: SELECT_TRAIN_VARIANT_IN_FLIGHT})
+
+
+async def check_specific_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await show_deparature_buttons(update, context, {SELECT_TRAIN_VARIANT_KEY: SELECT_TRAIN_VARIANT_FUTURE})
+
+
+async def show_deparature_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, additional_ctx=None):
+    if additional_ctx is None:
+        additional_ctx = {}
     logging.info("Got select_departure_station command from user=%s, context=%s", update.effective_user,
                  context.chat_data)
 
     # Get the user's selected departure stations
-    buttons = get_station_buttons(TRAIN_STATIONS, SELECT_ARRIVAL_STATION)
+    buttons = get_station_buttons(TRAIN_STATIONS, SELECT_ARRIVAL_STATION, FROM_STATION_KEY, additional_ctx)
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
@@ -87,11 +101,15 @@ async def select_departure_station(update: Update, context: ContextTypes.DEFAULT
     return "select_arrival_station"
 
 
-def get_station_buttons(stations, next_state, additional_context={}):
+def get_station_buttons(stations, next_state, ctx_key_for_station, additional_context=None):
+    if additional_context is None:
+        additional_context = {}
+    if 'ns' in additional_context:
+        additional_context.pop('ns')
     stations = sorted(stations, key=lambda station: station['english'])
     return [[InlineKeyboardButton(station['english'], callback_data=json.dumps({
                                                                                    NEXT_STATE: next_state,
-                                                                                   SELECTED_STATION_KEY: station['id']
+                                                                                   ctx_key_for_station: station['id']
                                                                                } | additional_context))]
             for station in stations]
 
@@ -101,13 +119,12 @@ async def select_arrival_station(update: Update, context: ContextTypes.DEFAULT_T
                  context.chat_data)
 
     callback_data = json.loads(update.callback_query.data)
-    departure_station_id = callback_data[SELECTED_STATION_KEY]
-    # context.chat_data['departure_station_id'] = departure_station_id
+    departure_station_id = callback_data[FROM_STATION_KEY]
 
     # Get the user's selected departure stations
-    additional_context = {FROM_STATION_KEY: departure_station_id}
+    additional_context = {FROM_STATION_KEY: departure_station_id} | callback_data
     buttons = get_station_buttons(list(filter(lambda station: station['id'] != departure_station_id, TRAIN_STATIONS)),
-                                  SELECT_DEPARTURE_TIME, additional_context)
+                                  SELECT_DEPARTURE_TIME, TO_STATION_KEY, additional_context)
 
     reply_markup = InlineKeyboardMarkup(buttons)
     departure_station_name = next(filter(lambda s: s['id'] == departure_station_id, TRAIN_STATIONS))['english'].replace(
@@ -155,25 +172,29 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
                  context.chat_data, update.effective_chat.id)
 
     query = update.callback_query
-    # callback_data_cache.process_callback_query(query)
     callback_data = json.loads(update.callback_query.data)
 
     logging.info("Callback data %s", callback_data)
 
-    to_station_id = callback_data[SELECTED_STATION_KEY]
-    # context.chat_data['arrival_station_id'] = to_station_id
-    # from_station_id = context.chat_data['from_station_id']
+    to_station_id = callback_data[TO_STATION_KEY]
     from_station_id = callback_data[FROM_STATION_KEY]
+    callback_data.pop('ns')
 
-    additional_context = {FROM_STATION_KEY: from_station_id, TO_STATION_KEY: to_station_id}
+    additional_context = {FROM_STATION_KEY: from_station_id, TO_STATION_KEY: to_station_id} | callback_data
 
     all_times = get_train_times(from_station_id,
                                 to_station_id)
     now = datetime.now()
 
+    train_variant = callback_data[SELECT_TRAIN_VARIANT_KEY]
+    logging.info("Checking train variant %s", train_variant)
+
     def is_applicable_time(time):
-        (dep, arr) = time
-        return dateutil.parser.isoparse(arr) > now
+        (departure_time, arrival_time) = time
+        if train_variant == SELECT_TRAIN_VARIANT_FUTURE:
+            return dateutil.parser.isoparse(departure_time) > now
+        elif train_variant == SELECT_TRAIN_VARIANT_IN_FLIGHT:
+            return dateutil.parser.isoparse(departure_time) < now < dateutil.parser.isoparse(arrival_time)
 
     future_times = list(filter(is_applicable_time,
                                all_times))
@@ -194,8 +215,6 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
         for dep, arr in times] for times in time_by_hour]
 
     reply_markup = InlineKeyboardMarkup(buttons)
-    # reply_markup = callback_data_cache.process_keyboard(reply_markup)
-
 
     departure_station_name = next(filter(lambda s: s['id'] == from_station_id, TRAIN_STATIONS))['english'].replace(
         '-', '\-')
@@ -215,7 +234,6 @@ async def check_delays_for_specific_time(update: Update, context: ContextTypes.D
                  context.chat_data)
 
     query = update.callback_query
-    # callback_data_cache.process_callback_query(callback_query=query)
     callback_data = json.loads(query.data)
     logging.info("Callback data %s", callback_data)
 
