@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from itertools import groupby
 from typing import Optional
 
@@ -12,25 +12,36 @@ from telegram import Update, InlineKeyboardMarkup, \
 from telegram.ext import CallbackQueryHandler, ApplicationBuilder, CommandHandler, ContextTypes, ConversationHandler, \
     CallbackContext, CallbackDataCache, ExtBot
 
+import notification_scheduler
+from database import add_subscription_to_database, get_subscriptions, TrainSubscription, get_subscription, \
+    delete_subscriptions
+from date_utils import next_weekday, WEEKDAYS
 from train_facade import get_train_times, get_delay_from_api
 from train_stations import TRAIN_STATIONS
 
 FROM_STATION_KEY = 'from_station'
 TO_STATION_KEY = 'to_station'
 TIME_KEY = 'time'
+DAY_KEY = 'day'
 
 SELECTED_ID = 'si'
 NEXT_STATE = 'ns'
 
-SELECT_ARRIVAL_STATION = 'c1'
-SELECT_DEPARTURE_TIME = 'c2'
-CHECK_DELAYS_FOR_SPECIFIC_TIME = 'c3'
-REFRESH = 'c4'
-SUBSCRIBE_TO_SPECIFIC = 'c5'
+SELECT_ARRIVAL_STATION = 'SELECT_ARRIVAL_STATION'
+SELECT_DEPARTURE_TIME = 'SELECT_DEPARTURE_TIME'
+SELECT_DEPARTURE_STATION = 'SELECT_DEPARTURE_STATION'
+CHECK_DELAYS_FOR_SPECIFIC_TIME = 'CHECK_DELAYS_FOR_SPECIFIC_TIME'
+REFRESH = 'REFRESH'
+SUBSCRIBE_TO_SPECIFIC = 'SUBSCRIBE_TO_SPECIFIC'
 
 SELECT_TRAIN_VARIANT_KEY = 'train_variant'
 SELECT_TRAIN_VARIANT_IN_FLIGHT = 'in_flight'
 SELECT_TRAIN_VARIANT_FUTURE = 'future'
+SUBSCRIBE_VARIANT = 'subscribe'
+
+EDIT_SUBSCRIPTION = 'EDIT_SUBSCRIPTION'
+DELETE_SUBSCRIPTION = 'DELETE_SUBSCRIPTION'
+SUB_ID = 'SUB_ID'
 
 bot = None
 callback_data_cache: CallbackDataCache | None = None
@@ -39,7 +50,7 @@ callback_data_cache: CallbackDataCache | None = None
 def next_state_is(state):
     def is_state(data):
         d = json.loads(data)
-        return d['ns'] == state
+        return d[NEXT_STATE] == state
 
     return is_state
 
@@ -47,7 +58,10 @@ def next_state_is(state):
 async def bot_error_handler(update: Optional[object], context: CallbackContext):
     logging.error("Exception while handling an update:", exc_info=context.error)
     if update is not None:
-        await update.effective_message.edit_text("Sorry, something went wrong.")
+        try:
+            await update.effective_message.edit_text("Sorry, something went wrong.")
+        except:
+            await update.message.reply_text("Sorry, something went wrong")
 
 
 def start_bot(token):
@@ -70,6 +84,14 @@ def start_bot(token):
         CallbackQueryHandler(check_delays_for_specific_time, next_state_is(REFRESH),
                              block=False))
 
+    application.add_handler(CommandHandler("subscribe", subscribe_to_train))
+    application.add_handler(
+        CallbackQueryHandler(save_day_and_show_departure_buttons, next_state_is(SELECT_DEPARTURE_STATION), block=False))
+
+    application.add_handler(CommandHandler("subscriptions", list_subscriptions))
+    application.add_handler(CallbackQueryHandler(edit_subscription, next_state_is(EDIT_SUBSCRIPTION), block=False))
+    application.add_handler(CallbackQueryHandler(delete_subscription, next_state_is(DELETE_SUBSCRIPTION), block=False))
+
     application.run_polling()
 
 
@@ -79,6 +101,25 @@ async def check_in_flight_train(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def check_specific_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_deparature_buttons(update, context, {SELECT_TRAIN_VARIANT_KEY: SELECT_TRAIN_VARIANT_FUTURE})
+
+
+async def subscribe_to_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await show_day_selection(update, context, {SELECT_TRAIN_VARIANT_KEY: SUBSCRIBE_VARIANT})
+
+
+async def show_day_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, additional_ctx=None):
+    buttons = [[InlineKeyboardButton(day.name, callback_data=json.dumps({
+                                                                            NEXT_STATE: SELECT_DEPARTURE_STATION,
+                                                                            DAY_KEY: day.value
+                                                                        } | additional_ctx))] for day in WEEKDAYS]
+
+    await update.message.reply_text("Please select subscription day:", reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def save_day_and_show_departure_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, additional_ctx=None):
+    callback_data = json.loads(update.callback_query.data)
+    callback_data.pop(NEXT_STATE)
+    await show_deparature_buttons(update, context, callback_data)
 
 
 async def show_deparature_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, additional_ctx=None):
@@ -92,7 +133,10 @@ async def show_deparature_buttons(update: Update, context: ContextTypes.DEFAULT_
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
-    await update.message.reply_text("Please select a departure station:", reply_markup=reply_markup)
+    if update.callback_query is not None and update.callback_query.message is not None:
+        await update.callback_query.message.edit_text("Please select a departure station:", reply_markup=reply_markup)
+    else:
+        await update.message.reply_text("Please select a departure station:", reply_markup=reply_markup)
 
     return "select_arrival_station"
 
@@ -178,8 +222,9 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
 
     additional_context = {FROM_STATION_KEY: from_station_id, TO_STATION_KEY: to_station_id} | callback_data
 
+    day = callback_data[DAY_KEY] if DAY_KEY in callback_data else None
     all_times = get_train_times(from_station_id,
-                                to_station_id)
+                                to_station_id, day)
     now = datetime.now()
 
     train_variant = callback_data[SELECT_TRAIN_VARIANT_KEY]
@@ -191,11 +236,13 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
             return dateutil.parser.isoparse(departure_time) > now
         elif train_variant == SELECT_TRAIN_VARIANT_IN_FLIGHT:
             return dateutil.parser.isoparse(departure_time) < now < dateutil.parser.isoparse(arrival_time)
+        elif train_variant == SUBSCRIBE_VARIANT:
+            return True
 
-    future_times = list(filter(is_applicable_time,
-                               all_times))
+    relevant_times = list(filter(is_applicable_time,
+                                 all_times))
 
-    time_by_hour_iter = groupby(future_times, lambda time: (
+    time_by_hour_iter = groupby(relevant_times, lambda time: (
         dateutil.parser.isoparse(time[0]).hour))
 
     time_by_hour = []
@@ -212,10 +259,8 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
-    departure_station_name = next(filter(lambda s: s['id'] == from_station_id, TRAIN_STATIONS))['english'].replace(
-        '-', '\-')
-    arrival_station_name = next(filter(lambda s: s['id'] == to_station_id, TRAIN_STATIONS))['english'].replace(
-        '-', '\-')
+    departure_station_name = station_id_to_name(from_station_id)
+    arrival_station_name = station_id_to_name(to_station_id)
 
     await query.message.edit_text(
         "Departing from *{departure_station}* to *{arrival_station}*\. Please select departure time:".format(
@@ -223,6 +268,13 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
         parse_mode='MarkdownV2')
 
     return "departure_time_selected"
+
+
+def station_id_to_name(station_id, escape=True):
+    raw_name = next(filter(lambda s: s['id'] == str(station_id), TRAIN_STATIONS))['english']
+    if escape:
+        return raw_name.replace('-', '\-')
+    return raw_name
 
 
 async def check_delays_for_specific_time(update: Update, context: ContextTypes.DEFAULT_TYPE, to_user=None):
@@ -236,6 +288,33 @@ async def check_delays_for_specific_time(update: Update, context: ContextTypes.D
     selected_time = callback_data['time']
     departure_station_id = callback_data[FROM_STATION_KEY]
     arrival_station_id = callback_data[TO_STATION_KEY]
+
+    if SELECT_TRAIN_VARIANT_KEY in callback_data and callback_data[SELECT_TRAIN_VARIANT_KEY] == SUBSCRIBE_VARIANT:
+        logging.info("Subscribing to train")
+        chat_id = update.effective_chat.id
+        dt = dateutil.parser.isoparse(selected_time)
+        selected_hour = dt.strftime("%H:%M")
+        notification_time = dt - timedelta(minutes=30)
+
+        selected_day_num = callback_data[DAY_KEY]
+        scheduled_job = notification_scheduler.schedule_train_notification(str(chat_id), departure_station_id,
+                                                                           arrival_station_id,
+                                                                           selected_hour,
+                                                                           selected_day_num,
+                                                                           notification_time.hour,
+                                                                           notification_time.minute)
+
+        add_subscription_to_database(chat_id, departure_station_id, arrival_station_id, WEEKDAYS(selected_day_num).name,
+                                     selected_hour,
+                                     scheduled_job.id)
+        await query.message.edit_text(
+            "I've subscribed you to the 🚆 {from_station} \- {to_station} train service departing {day} at "
+            "⏰ {departure_time}\. I'll provide a status update 30 minutes before departure\.".format(
+                day=WEEKDAYS(selected_day_num).name,
+                from_station=station_id_to_name(callback_data[FROM_STATION_KEY]),
+                to_station=station_id_to_name(callback_data[TO_STATION_KEY]), departure_time=selected_hour),
+            parse_mode='MarkdownV2')
+        return
 
     logging.info("Checking delay from %s to %s on %s", departure_station_id, arrival_station_id, selected_time)
 
@@ -280,10 +359,61 @@ def format_delay_response(train_times, selected_time, departure_station_id, arri
     return resposne_txt
 
 
-async def send_status_notification(chat_id, from_station, to_station, train_hour: str):
+async def send_status_notification(chat_id, from_station, to_station, train_day: int, train_hour: str):
     hour, minute = map(int, train_hour.split(':'))
-    train_datetime = datetime.now().replace(hour=hour, minute=minute, second=0).isoformat(timespec='seconds')
+    day = next_weekday(date.today(), train_day)
+    train_datetime = datetime(year=day.year, month=day.month, day=day.day, hour=hour, minute=minute,
+                              second=0).isoformat(timespec='seconds')
     train_times = get_delay_from_api(from_station, to_station, train_datetime)
     response_txt = format_delay_response(train_times, train_datetime, from_station, to_station)
     logging.info("Sending delay notification to chat_id " + chat_id)
     await bot.send_message(chat_id, response_txt, parse_mode='MarkdownV2')
+
+
+async def list_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    subscriptions: [TrainSubscription] = get_subscriptions(str(chat_id))
+    buttons = [[InlineKeyboardButton(
+        "{} {} {} - {}".format(sub.day_of_week, sub.train_hour, station_id_to_name(sub.from_station, False),
+                               station_id_to_name(sub.to_station, False)), callback_data=json.dumps({
+            NEXT_STATE: EDIT_SUBSCRIPTION,
+            SUB_ID: sub.id
+        }))] for sub in
+        subscriptions]
+
+    message = update.message if update.message is not None else update.callback_query.message
+    if not buttons:
+        await message.reply_text("No active subscriptions. To add a subscription, type /subscribe")
+        return
+    await message.reply_text("Active subscriptions:", reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def edit_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    callback_data = json.loads(update.callback_query.data)
+    sub_id = callback_data[SUB_ID]
+    chat_id = update.effective_chat.id
+    sub = get_subscription(str(chat_id), sub_id)
+
+    buttons = [[InlineKeyboardButton("Delete", callback_data=json.dumps({
+        NEXT_STATE: DELETE_SUBSCRIPTION,
+        SUB_ID: sub_id
+    }))]]
+
+    sub_desc = "Editing the {} {} subscription {} \- {}".format(sub.train_hour, sub.day_of_week,
+                                                                station_id_to_name(sub.from_station),
+                                                                station_id_to_name(sub.to_station))
+    await update.callback_query.message.edit_text(sub_desc, reply_markup=InlineKeyboardMarkup(buttons),
+                                                  parse_mode='MarkdownV2')
+
+
+async def delete_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    callback_data = json.loads(update.callback_query.data)
+    sub_id = callback_data[SUB_ID]
+    chat_id = str(update.effective_chat.id)
+    sub = get_subscription(chat_id, sub_id)
+
+    notification_scheduler.delete_job(sub.scheduler_job_id)
+    delete_subscriptions(sub_id)
+
+    await update.callback_query.message.edit_text("Deleted subscription")
+    await list_subscriptions(update, context)

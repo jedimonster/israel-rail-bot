@@ -2,16 +2,20 @@ import datetime
 import logging
 import os
 from datetime import date
+
+import dateutil
 import requests
 from dateutil.parser import parse
+
+from date_utils import next_weekday
 
 RAIL_API_ENDPOINT = 'https://israelrail.azurefd.net/rjpa-prod/api/v1/timetable/searchTrainLuzForDateTime?fromStation={from_station}&toStation={to_station}&date' \
                     '={day}&hour={hour}&scheduleType=1&systemType=1&language"id"="hebrew"'
 RAIL_API_KEY = os.environ['RAIL_TOKEN']
 
 
-def get_train_times(departure_station, arrival_station):
-    day = date.today()
+def get_train_times(departure_station, arrival_station, day_num=None):
+    day = date.today() if day_num is None else next_weekday(date.today(), day_num)
     current_hour = '16:30'
     res = get_timetable(departure_station, arrival_station, day, current_hour)
     return [(travel['departureTime'], travel['arrivalTime']) for travel in res['result']['travels']]
@@ -44,7 +48,9 @@ class TrainTimes:
 
 def get_delay_from_api(from_station, to_station, hour) -> TrainTimes:
     logging.info("Checking for delays for train from {} to {} at {} today".format(from_station, to_station, hour))
-    day = date.today()
+    day = dateutil.parser.isoparse(hour).date()
+    # Format in specific train '2023-09-17T21:55:00'
+    # Format in sub:
     timetable = get_timetable(from_station, to_station, day, '07:00')
     logging.info("Got timetable " + str(timetable))
     for travel in timetable['result']['travels']:
