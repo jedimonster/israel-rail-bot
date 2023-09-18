@@ -46,7 +46,7 @@ class TrainTimes:
         return parse(self.original_arrival) + datetime.timedelta(minutes=self.delay_in_minutes)
 
 
-class TrainNotFoundError:
+class TrainNotFoundError(BaseException):
     pass
 
 

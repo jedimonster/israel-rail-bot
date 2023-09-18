@@ -16,7 +16,7 @@ import notification_scheduler
 from database import add_subscription_to_database, get_subscriptions, TrainSubscription, get_subscription, \
     delete_subscriptions
 from date_utils import next_weekday, WEEKDAYS
-from train_facade import get_train_times, get_delay_from_api
+from train_facade import get_train_times, get_delay_from_api, TrainNotFoundError
 from train_stations import TRAIN_STATIONS
 
 FROM_STATION_KEY = 'from_station'
@@ -364,8 +364,11 @@ async def send_status_notification(chat_id, from_station, to_station, train_day:
     day = next_weekday(date.today(), train_day)
     train_datetime = datetime(year=day.year, month=day.month, day=day.day, hour=hour, minute=minute,
                               second=0).isoformat(timespec='seconds')
-    train_times = get_delay_from_api(from_station, to_station, train_datetime)
-    if train_times is None:
+    try:
+        train_times = get_delay_from_api(from_station, to_station, train_datetime)
+    except TrainNotFoundError:
+        logging.error("Could not found train from {} to {} day {} hour {} datetime {}", from_station, to_station, train_day,
+                      train_hour, train_datetime)
         await bot.send_message(chat_id, "I couldn't find the {} train, either it's canceled or something is wrong on my"
                                         "end")
         return
