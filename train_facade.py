@@ -46,13 +46,16 @@ class TrainTimes:
         return parse(self.original_arrival) + datetime.timedelta(minutes=self.delay_in_minutes)
 
 
+class TrainNotFoundError:
+    pass
+
+
 def get_delay_from_api(from_station, to_station, hour) -> TrainTimes:
     logging.info("Checking for delays for train from {} to {} at {} today".format(from_station, to_station, hour))
     day = dateutil.parser.isoparse(hour).date()
     # Format in specific train '2023-09-17T21:55:00'
     # Format in sub:
     timetable = get_timetable(from_station, to_station, day, '07:00')
-    logging.info("Got timetable " + str(timetable))
     for travel in timetable['result']['travels']:
         scheduled_departure = travel['departureTime']
         if scheduled_departure != hour:
@@ -63,7 +66,7 @@ def get_delay_from_api(from_station, to_station, hour) -> TrainTimes:
         original_arrival = travel['arrivalTime']
 
         if train_position is None:
-            logging.info('No info for train departing at {departure}'.format(departure=scheduled_departure))
+            logging.info('No info for train departing at {departure}, it is probably on time'.format(departure=scheduled_departure))
             return TrainTimes(original_departure, original_arrival, 0)
 
         train_delay = train_position['calcDiffMinutes']
@@ -73,3 +76,5 @@ def get_delay_from_api(from_station, to_station, hour) -> TrainTimes:
             origDep=scheduled_departure, delay=train_delay, updated_departure=train_times.get_updated_departure()))
 
         return train_times
+    raise TrainNotFoundError
+

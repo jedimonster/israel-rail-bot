@@ -365,6 +365,10 @@ async def send_status_notification(chat_id, from_station, to_station, train_day:
     train_datetime = datetime(year=day.year, month=day.month, day=day.day, hour=hour, minute=minute,
                               second=0).isoformat(timespec='seconds')
     train_times = get_delay_from_api(from_station, to_station, train_datetime)
+    if train_times is None:
+        await bot.send_message(chat_id, "I couldn't find the {} train, either it's canceled or something is wrong on my"
+                                        "end")
+        return
     response_txt = format_delay_response(train_times, train_datetime, from_station, to_station)
     logging.info("Sending delay notification to chat_id " + chat_id)
     await bot.send_message(chat_id, response_txt, parse_mode='MarkdownV2')
