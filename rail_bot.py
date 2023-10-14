@@ -86,6 +86,8 @@ def start_bot(token):
     application.add_handler(
         CallbackQueryHandler(check_delays_for_specific_time, next_state_is(REFRESH),
                              block=False))
+    application.add_handler(
+        CallbackQueryHandler(check_delays_for_specific_time, next_state_is(SUBSCRIBE_TO_SPECIFIC), block=False))
 
     application.add_handler(CommandHandler("subscribe", subscribe_to_train))
     application.add_handler(
@@ -301,7 +303,7 @@ async def check_delays_for_specific_time(update: Update, context: ContextTypes.D
         selected_hour = dt.strftime("%H:%M")
         notification_time = dt - timedelta(minutes=30)
 
-        selected_day_num = callback_data[DAY_KEY]
+        selected_day_num = int(dt.strftime('%w'))
         scheduled_job = notification_scheduler.schedule_train_notification(str(chat_id), departure_station_id,
                                                                            arrival_station_id,
                                                                            selected_hour,
@@ -331,8 +333,12 @@ async def check_delays_for_specific_time(update: Update, context: ContextTypes.D
             {NEXT_STATE: REFRESH, FROM_STATION_KEY: departure_station_id, TO_STATION_KEY: arrival_station_id,
              TIME_KEY: selected_time})),
           InlineKeyboardButton("Subscribe", callback_data=json.dumps(
-              {NEXT_STATE: SUBSCRIBE_TO_SPECIFIC, FROM_STATION_KEY: departure_station_id,
-               TO_STATION_KEY: arrival_station_id, TIME_KEY: selected_time}))]])
+              {
+                  NEXT_STATE: SUBSCRIBE_TO_SPECIFIC,
+                  SELECT_TRAIN_VARIANT_KEY: SUBSCRIBE_VARIANT,
+                  FROM_STATION_KEY: departure_station_id,
+                  TO_STATION_KEY: arrival_station_id,
+                  TIME_KEY: selected_time}))]])
 
     response_txt = format_delay_response(train_times, selected_time, departure_station_id, arrival_station_id)
 
@@ -371,8 +377,8 @@ async def send_status_notification(chat_id, from_station, to_station, train_day:
         train_times = get_delay_from_api(from_station, to_station, train_datetime)
     except TrainNotFoundError:
         logging.info("Could not found train from {} to {} day {} hour {} datetime {}", from_station, to_station,
-                      train_day,
-                      train_hour, train_datetime)
+                     train_day,
+                     train_hour, train_datetime)
         await bot.send_message(chat_id, "The {} train from {} to {} appears to be **canceled**".format(
             format_time_from_str(train_datetime), station_id_to_name(from_station), station_id_to_name(to_station)),
                                parse_mode='MarkdownV2')
