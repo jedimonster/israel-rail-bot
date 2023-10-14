@@ -9,4 +9,4 @@ def next_weekday(d, weekday):
     return d + datetime.timedelta(days_ahead)
 
 
-WEEKDAYS = IntEnum("Weekdays", 'Monday Tuesday Wednesday Thursday Friday Saturday', start=0)
+WEEKDAYS = IntEnum("Weekdays", 'Sunday Monday Tuesday Wednesday Thursday Friday Saturday', start=0)
