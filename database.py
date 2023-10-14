@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 
+from date_utils import WEEKDAYS
+
 
 class Base(DeclarativeBase):
     pass
@@ -54,6 +56,10 @@ def get_subscriptions(chat_id: str) -> [TrainSubscription]:
         statement = select(TrainSubscription).where(TrainSubscription.chat_id == chat_id).order_by(
             TrainSubscription.day_of_week, TrainSubscription.train_hour)
         train_subs = session.scalars(statement).all()
+
+        def extract_weekday(sub: TrainSubscription):
+            return WEEKDAYS[sub.day_of_week].value
+        train_subs = sorted(train_subs, key=extract_weekday)
 
     return train_subs
 
