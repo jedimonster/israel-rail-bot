@@ -39,8 +39,10 @@ SELECT_TRAIN_VARIANT_IN_FLIGHT = 'in_flight'
 SELECT_TRAIN_VARIANT_FUTURE = 'future'
 SUBSCRIBE_VARIANT = 'subscribe'
 
+LIST_SUBSCRIPTION = 'LIST_SUBSCRIPTION'
 EDIT_SUBSCRIPTION = 'EDIT_SUBSCRIPTION'
 DELETE_SUBSCRIPTION = 'DELETE_SUBSCRIPTION'
+CHECK_SUBSCRIPTION = 'CHECK_SUBSCRIPTION'
 SUB_ID = 'SUB_ID'
 
 bot = None
@@ -89,8 +91,10 @@ def start_bot(token):
         CallbackQueryHandler(save_day_and_show_departure_buttons, next_state_is(SELECT_DEPARTURE_STATION), block=False))
 
     application.add_handler(CommandHandler("subscriptions", list_subscriptions))
+    application.add_handler(CallbackQueryHandler(list_subscriptions, next_state_is(LIST_SUBSCRIPTION), block=False))
     application.add_handler(CallbackQueryHandler(edit_subscription, next_state_is(EDIT_SUBSCRIPTION), block=False))
     application.add_handler(CallbackQueryHandler(delete_subscription, next_state_is(DELETE_SUBSCRIPTION), block=False))
+    application.add_handler(CallbackQueryHandler(check_subscription, next_state_is(CHECK_SUBSCRIPTION), block=False))
 
     application.run_polling()
 
@@ -340,10 +344,8 @@ async def check_delays_for_specific_time(update: Update, context: ContextTypes.D
 
 
 def format_delay_response(train_times, selected_time, departure_station_id, arrival_station_id):
-    departure_station_name = next(filter(lambda s: s['id'] == departure_station_id, TRAIN_STATIONS))['english'].replace(
-        '-', '\-')
-    arrival_station_name = next(filter(lambda s: s['id'] == arrival_station_id, TRAIN_STATIONS))['english'].replace('-',
-                                                                                                                    '\-')
+    departure_station_name = station_id_to_name(departure_station_id)
+    arrival_station_name = station_id_to_name(arrival_station_id)
     last_update_str = '\(updated {}\)'.format(datetime.strftime(datetime.now(), '%H:%M'))
     if train_times.delay_in_minutes > 0:
         departure_str = '️️~{}~ ⏱ {}'.format(format_time_from_str(train_times.original_departure),
@@ -367,13 +369,14 @@ async def send_status_notification(chat_id, from_station, to_station, train_day:
     try:
         train_times = get_delay_from_api(from_station, to_station, train_datetime)
     except TrainNotFoundError:
-        logging.error("Could not found train from {} to {} day {} hour {} datetime {}", from_station, to_station, train_day,
+        logging.error("Could not found train from {} to {} day {} hour {} datetime {}", from_station, to_station,
+                      train_day,
                       train_hour, train_datetime)
         await bot.send_message(chat_id, "I couldn't find the {} train, either it's canceled or something is wrong on my"
                                         "end")
         return
     response_txt = format_delay_response(train_times, train_datetime, from_station, to_station)
-    logging.info("Sending delay notification to chat_id " + chat_id)
+    logging.info("Sending delay notification to chat_id %s", chat_id)
     await bot.send_message(chat_id, response_txt, parse_mode='MarkdownV2')
 
 
@@ -392,7 +395,11 @@ async def list_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not buttons:
         await message.reply_text("No active subscriptions. To add a subscription, type /subscribe")
         return
-    await message.reply_text("Active subscriptions:", reply_markup=InlineKeyboardMarkup(buttons))
+    if update.message is not None:
+        await message.reply_text("Active subscriptions:", reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        await update.callback_query.message.edit_text("Active subscriptions:",
+                                                      reply_markup=InlineKeyboardMarkup(buttons))
 
 
 async def edit_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -401,12 +408,22 @@ async def edit_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     sub = get_subscription(str(chat_id), sub_id)
 
-    buttons = [[InlineKeyboardButton("Delete", callback_data=json.dumps({
-        NEXT_STATE: DELETE_SUBSCRIPTION,
-        SUB_ID: sub_id
-    }))]]
+    buttons = [
+        [
+            InlineKeyboardButton("Check now", callback_data=json.dumps({
+                NEXT_STATE: CHECK_SUBSCRIPTION,
+                SUB_ID: sub_id,
+            })),
+            InlineKeyboardButton("Delete", callback_data=json.dumps({
+                NEXT_STATE: DELETE_SUBSCRIPTION,
+                SUB_ID: sub_id
+            }))],
+        [
+            InlineKeyboardButton("<< Back to subscriptions", callback_data=json.dumps({
+                NEXT_STATE: LIST_SUBSCRIPTION,
+            }))]]
 
-    sub_desc = "Editing the {} {} subscription {} \- {}".format(sub.train_hour, sub.day_of_week,
+    sub_desc = "Subscription on {}, {} from {} to {}".format(sub.day_of_week, sub.train_hour,
                                                                 station_id_to_name(sub.from_station),
                                                                 station_id_to_name(sub.to_station))
     await update.callback_query.message.edit_text(sub_desc, reply_markup=InlineKeyboardMarkup(buttons),
@@ -424,3 +441,13 @@ async def delete_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     await update.callback_query.message.edit_text("Deleted subscription")
     await list_subscriptions(update, context)
+
+
+async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    callback_data = json.loads(update.callback_query.data)
+    sub_id = callback_data[SUB_ID]
+    chat_id = str(update.effective_chat.id)
+    sub = get_subscription(chat_id, sub_id)
+
+    await send_status_notification(sub.chat_id, sub.from_station, sub.to_station, WEEKDAYS[sub.day_of_week],
+                                   sub.train_hour)
