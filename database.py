@@ -59,8 +59,8 @@ def get_subscriptions(chat_id: str) -> [TrainSubscription]:
 
 def get_subscription(chat_id: str, sub_id: str) -> [TrainSubscription]:
     with Session(sqlalchemy_engine) as session:
-        statement = select(TrainSubscription).where(
-            TrainSubscription.chat_id == chat_id and TrainSubscription.id == sub_id)
+        statement = select(TrainSubscription).where(TrainSubscription.chat_id == chat_id,
+                                                    TrainSubscription.id == sub_id)
         train_sub = session.scalar(statement)
 
     return train_sub
