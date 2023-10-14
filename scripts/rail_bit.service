@@ -1,0 +1,14 @@
+Oct 14 12:09:08 minecraft1 pipenv[1871248]: 2023-10-14 12:09:08,079 INFO HTTP Request: POST https://api.telegram.org/bot6225246636:AAFLqnI2xoLS8zcb9PQ8UzeRQYe45Zce8cI/getUpdates "HTTP/1.1 200 OK"
+[Unit]
+Description=Your Script Service
+After=network.target
+
+[Service]
+User=railbot
+WorkingDirectory=/home/railbot/railbot/israel-rail-bot
+ExecStart=/home/railbot/.local/bin/pipenv run python3 main.py
+Restart=always
+Environment="RAIL_TOKEN=4b0d355121fe4e0bb3d86e902efe9f20" "TELEGRAM_TOKEN=6225246636:AAFLqnI2xoLS8zcb9PQ8UzeRQYe45Zce8cI"
+
+[Install]
+WantedBy=multi-user.target
