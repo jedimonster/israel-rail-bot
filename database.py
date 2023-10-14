@@ -13,13 +13,13 @@ class Base(DeclarativeBase):
 class TrainSubscription(Base):
     __tablename__ = 'train_subscriptions'
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    chat_id: Mapped[int] = mapped_column()
     from_station: Mapped[int]
     to_station: Mapped[int]
     train_hour: Mapped[str]
     day_of_week: Mapped[str]
     scheduler_job_id: Mapped[str]
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chat_id: Mapped[int] = mapped_column()
 
 
 sqlalchemy_engine = create_engine("sqlite+pysqlite:///subscriptions.sqlite", echo=False)

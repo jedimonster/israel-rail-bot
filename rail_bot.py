@@ -6,6 +6,7 @@ from typing import Optional
 
 import dateutil
 import humanize
+from apscheduler.jobstores.base import JobLookupError
 from dateutil.parser import parse
 from telegram import Update, InlineKeyboardMarkup, \
     InlineKeyboardButton
@@ -437,7 +438,11 @@ async def delete_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE
     chat_id = str(update.effective_chat.id)
     sub = get_subscription(chat_id, sub_id)
 
-    notification_scheduler.delete_job(sub.scheduler_job_id)
+    try:
+        notification_scheduler.delete_job(sub.scheduler_job_id)
+    except JobLookupError:
+        logging.warning("Could not find job id %s", sub.scheduler_job_id)
+
     delete_subscriptions(sub_id)
 
     await update.callback_query.message.edit_text("Deleted subscription")
