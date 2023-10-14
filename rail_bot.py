@@ -11,7 +11,7 @@ from dateutil.parser import parse
 from telegram import Update, InlineKeyboardMarkup, \
     InlineKeyboardButton
 from telegram.ext import CallbackQueryHandler, ApplicationBuilder, CommandHandler, ContextTypes, ConversationHandler, \
-    CallbackContext, CallbackDataCache, ExtBot
+    CallbackContext, CallbackDataCache, ExtBot, PicklePersistence
 
 import notification_scheduler
 from database import add_subscription_to_database, get_subscriptions, TrainSubscription, get_subscription, \
@@ -70,7 +70,7 @@ async def bot_error_handler(update: Optional[object], context: CallbackContext):
 def start_bot(token):
     global bot, callback_data_cache
     bot = ExtBot(token)
-    application = ApplicationBuilder().arbitrary_callback_data(True).token(token).build()
+    application = ApplicationBuilder().persistence(PicklePersistence(filepath='bot_data.pickle')).arbitrary_callback_data(True).token(token).build()
 
     application.add_error_handler(bot_error_handler)
 
