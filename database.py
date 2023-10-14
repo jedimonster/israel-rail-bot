@@ -45,7 +45,7 @@ def add_subscription_to_database(chat_id, departure_station_id, arrival_station_
 
     with Session(sqlalchemy_engine) as session:
         select_subs = select(TrainSubscription).where(TrainSubscription.chat_id == chat_id)
-        subs = session.scalar(select_subs)
+        subs = session.scalars(select_subs).all()
         logging.info("Active user subs: %s", subs)
 
 
