@@ -51,7 +51,8 @@ def add_subscription_to_database(chat_id, departure_station_id, arrival_station_
 
 def get_subscriptions(chat_id: str) -> [TrainSubscription]:
     with Session(sqlalchemy_engine) as session:
-        statement = select(TrainSubscription).where(TrainSubscription.chat_id == chat_id)
+        statement = select(TrainSubscription).where(TrainSubscription.chat_id == chat_id).order_by(
+            TrainSubscription.day_of_week, TrainSubscription.train_hour)
         train_subs = session.scalars(statement).all()
 
     return train_subs
