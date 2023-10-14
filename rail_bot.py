@@ -369,11 +369,12 @@ async def send_status_notification(chat_id, from_station, to_station, train_day:
     try:
         train_times = get_delay_from_api(from_station, to_station, train_datetime)
     except TrainNotFoundError:
-        logging.error("Could not found train from {} to {} day {} hour {} datetime {}", from_station, to_station,
+        logging.info("Could not found train from {} to {} day {} hour {} datetime {}", from_station, to_station,
                       train_day,
                       train_hour, train_datetime)
-        await bot.send_message(chat_id, "I couldn't find the {} train, either it's canceled or something is wrong on my"
-                                        "end")
+        await bot.send_message(chat_id, "The {} train from {} to {} appears to be **canceled**".format(
+            format_time_from_str(train_datetime), station_id_to_name(from_station), station_id_to_name(to_station)),
+                               parse_mode='MarkdownV2')
         return
     response_txt = format_delay_response(train_times, train_datetime, from_station, to_station)
     logging.info("Sending delay notification to chat_id %s", chat_id)
@@ -424,8 +425,8 @@ async def edit_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }))]]
 
     sub_desc = "Subscription on {}, {} from {} to {}".format(sub.day_of_week, sub.train_hour,
-                                                                station_id_to_name(sub.from_station),
-                                                                station_id_to_name(sub.to_station))
+                                                             station_id_to_name(sub.from_station),
+                                                             station_id_to_name(sub.to_station))
     await update.callback_query.message.edit_text(sub_desc, reply_markup=InlineKeyboardMarkup(buttons),
                                                   parse_mode='MarkdownV2')
 
