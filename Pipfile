@@ -13,3 +13,4 @@ python-dateutil = "*"
 sqlalchemy = "*"
 
 [dev-packages]
+assertpy = "*"
