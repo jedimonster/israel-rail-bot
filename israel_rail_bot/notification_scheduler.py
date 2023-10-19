@@ -11,8 +11,8 @@ scheduler.start()
 
 async def send_notification_for_specific_train_user(chat_id: str, from_station: str, to_station: str,
                                                     train_day: int, train_time: str):
-    logging.info("Checking for details for chat id %s, train from %s to %s on %s", chat_id, from_station,
-                 to_station, train_time)
+    logging.info("Checking for details for chat id %s, train from %s to %s on day %s, hour %s", chat_id, from_station,
+                 to_station, train_day, train_time)
     await rail_bot.send_status_notification(chat_id, from_station, to_station, train_day, train_time)
 
 
