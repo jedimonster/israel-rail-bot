@@ -70,7 +70,7 @@ async def bot_error_handler(update: Optional[object], context: CallbackContext):
 def start_bot(token):
     global bot, callback_data_cache
     bot = ExtBot(token)
-    application = ApplicationBuilder().persistence(PicklePersistence(filepath='bot_data.pickle')).arbitrary_callback_data(True).token(token).build()
+    application = ApplicationBuilder().persistence(PicklePersistence(filepath='../bot_data.pickle')).arbitrary_callback_data(True).token(token).build()
 
     application.add_error_handler(bot_error_handler)
 
@@ -376,7 +376,7 @@ async def send_status_notification(chat_id, from_station, to_station, train_day:
     try:
         train_times = get_delay_from_api(from_station, to_station, train_datetime)
     except TrainNotFoundError:
-        logging.info("Could not found train from {} to {} day {} hour {} datetime {}", from_station, to_station,
+        logging.info("Could not find the train from {} to {} day {} hour {} datetime {}", from_station, to_station,
                      train_day,
                      train_hour, train_datetime)
         await bot.send_message(chat_id, "The {} train from {} to {} appears to be **canceled**".format(

@@ -3,7 +3,7 @@ from enum import IntEnum
 
 
 def next_weekday(d, weekday):
-    d_weekday = d.weekday() + 1 # account for the week starting on Sunday.
+    d_weekday = d.weekday() + 1  # account for the week starting on Sunday.
     days_ahead = weekday - d_weekday
     if days_ahead < 0:  # Target day already happened this week
         days_ahead += 7
