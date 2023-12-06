@@ -11,14 +11,14 @@ from dateutil.parser import parse
 from telegram import Update, InlineKeyboardMarkup, \
     InlineKeyboardButton
 from telegram.ext import CallbackQueryHandler, ApplicationBuilder, CommandHandler, ContextTypes, ConversationHandler, \
-    CallbackContext, CallbackDataCache, ExtBot, PicklePersistence
+    CallbackContext, ExtBot, PicklePersistence
 
 import notification_scheduler
 from database import add_subscription_to_database, get_subscriptions, TrainSubscription, get_subscription, \
     delete_subscriptions
 from date_utils import next_weekday, WEEKDAYS
-from train_facade import get_train_times, get_delay_from_api, TrainNotFoundError
-from train_stations import TRAIN_STATIONS
+from train_facade import get_train_times, get_delay_from_api, TrainNotFoundError, station_id_to_name
+from train_stations import FAVORITE_TRAIN_STATIONS
 
 FROM_STATION_KEY = 'from_station'
 TO_STATION_KEY = 'to_station'
@@ -47,7 +47,6 @@ CHECK_SUBSCRIPTION = 'CHECK_SUBSCRIPTION'
 SUB_ID = 'SUB_ID'
 
 bot = None
-callback_data_cache: CallbackDataCache | None = None
 
 
 def next_state_is(state):
@@ -67,10 +66,14 @@ async def bot_error_handler(update: Optional[object], context: CallbackContext):
             await update.message.reply_text("Sorry, something went wrong")
 
 
-def start_bot(token):
-    global bot, callback_data_cache
+def start_sender_bot(token):
+    global bot
     bot = ExtBot(token)
-    application = ApplicationBuilder().persistence(PicklePersistence(filepath='../bot_data.pickle')).arbitrary_callback_data(True).token(token).build()
+
+
+def start_bot(token):
+    application = ApplicationBuilder().persistence(
+        PicklePersistence(filepath='../bot_data.pickle')).arbitrary_callback_data(True).token(token).build()
 
     application.add_error_handler(bot_error_handler)
 
@@ -136,7 +139,7 @@ async def show_deparature_buttons(update: Update, context: ContextTypes.DEFAULT_
                  context.chat_data)
 
     # Get the user's selected departure stations
-    buttons = get_station_buttons(TRAIN_STATIONS, SELECT_ARRIVAL_STATION, FROM_STATION_KEY, additional_ctx)
+    buttons = get_station_buttons(FAVORITE_TRAIN_STATIONS, SELECT_ARRIVAL_STATION, FROM_STATION_KEY, additional_ctx)
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
@@ -170,11 +173,11 @@ async def select_arrival_station(update: Update, context: ContextTypes.DEFAULT_T
 
     # Get the user's selected departure stations
     additional_context = {FROM_STATION_KEY: departure_station_id} | callback_data
-    buttons = get_station_buttons(list(filter(lambda station: station['id'] != departure_station_id, TRAIN_STATIONS)),
+    buttons = get_station_buttons(list(filter(lambda station: station['id'] != departure_station_id, FAVORITE_TRAIN_STATIONS)),
                                   SELECT_DEPARTURE_TIME, TO_STATION_KEY, additional_context)
 
     reply_markup = InlineKeyboardMarkup(buttons)
-    departure_station_name = next(filter(lambda s: s['id'] == departure_station_id, TRAIN_STATIONS))['english'].replace(
+    departure_station_name = next(filter(lambda s: s['id'] == departure_station_id, FAVORITE_TRAIN_STATIONS))['english'].replace(
         '-', '\-')
 
     await update.callback_query.message.edit_text(
@@ -238,7 +241,7 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
     logging.info("Checking train variant %s", train_variant)
 
     def is_applicable_time(time):
-        (departure_time, arrival_time) = time
+        (departure_time, arrival_time, switches) = time
         if train_variant == SELECT_TRAIN_VARIANT_FUTURE:
             return dateutil.parser.isoparse(departure_time) > now
         elif train_variant == SELECT_TRAIN_VARIANT_IN_FLIGHT:
@@ -259,10 +262,11 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
 
     buttons = [[
         InlineKeyboardButton(
-            "{dep} ({duration})".format(dep=format_time_from_str(dep, show_day=False),
-                                        duration=fmt_interval(dep, arr)).capitalize(),
+            "{dep} ({duration}) {switch_indicator}".format(dep=format_time_from_str(dep, show_day=False),
+                                                           switch_indicator=fmt_switch_indicator(switches),
+                                                           duration=fmt_interval(dep, arr)).capitalize(),
             callback_data=json.dumps({'ns': CHECK_DELAYS_FOR_SPECIFIC_TIME, TIME_KEY: dep} | additional_context))
-        for dep, arr in times] for times in time_by_hour]
+        for dep, arr, switches in times] for times in time_by_hour]
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
@@ -277,11 +281,10 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
     return "departure_time_selected"
 
 
-def station_id_to_name(station_id, escape=True):
-    raw_name = next(filter(lambda s: s['id'] == str(station_id), TRAIN_STATIONS))['english']
-    if escape:
-        return raw_name.replace('-', '\-')
-    return raw_name
+def fmt_switch_indicator(switches):
+    if switches > 0:
+        return '*'
+    return ''
 
 
 async def check_delays_for_specific_time(update: Update, context: ContextTypes.DEFAULT_TYPE, to_user=None):
@@ -361,10 +364,19 @@ def format_delay_response(train_times, selected_time, departure_station_id, arri
     else:
         departure_str = '✅ {}'.format(format_time(train_times.get_updated_departure()))
         arrival_str = format_time_from_str(train_times.original_arrival, False)
-    resposne_txt = "Train from {departure_station} to {arrival_station} " \
-                   "Departing *{departure_str}* will arrive at {arrival_str} {updated}\.".format(
+
+    if train_times.switch_stations is not None:
+        switches = 'You will have to switch at: ' + ','.join(train_times.switch_stations) + '\n'
+    else:
+        switches = ''
+    resposne_txt = "From: *{departure_station}* \n" \
+                   "To: *{arrival_station}*\n" \
+                   "Departing: *{departure_str}*\n" \
+                   "Will arrive at {arrival_str}\. \n" \
+                   "{switches}" \
+                   "{updated}".format(
         departure_station=departure_station_name, arrival_station=arrival_station_name,
-        departure_str=departure_str, arrival_str=arrival_str, updated=last_update_str)
+        departure_str=departure_str, arrival_str=arrival_str, updated=last_update_str, switches=switches)
     return resposne_txt
 
 
@@ -379,8 +391,10 @@ async def send_status_notification(chat_id, from_station, to_station, train_day:
         logging.info("Could not find the train from {} to {} day {} hour {} datetime {}", from_station, to_station,
                      train_day,
                      train_hour, train_datetime)
-        await bot.send_message(chat_id, "The {} train from {} to {} appears to be **canceled**".format(
-            format_time_from_str(train_datetime), station_id_to_name(from_station), station_id_to_name(to_station)),
+        await bot.send_message(chat_id, "From: *{}*\n"
+                                        "To: *{}*\n"
+                                        "Departing at *{}* appears to be ❌ *CANCELED*".format(
+            station_id_to_name(from_station), station_id_to_name(to_station), format_time_from_str(train_datetime)),
                                parse_mode='MarkdownV2')
         return
     response_txt = format_delay_response(train_times, train_datetime, from_station, to_station)

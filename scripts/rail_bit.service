@@ -5,7 +5,7 @@ After=network.target
 
 [Service]
 User=railbot
-WorkingDirectory=/home/railbot/railbot/israel-rail-bot
+WorkingDirectory=/home/railbot/railbot/israel-rail-bot/israel_rail_bot
 ExecStart=/home/railbot/.local/bin/pipenv run python3 main.py
 Restart=always
 Environment="RAIL_TOKEN=<>" "TELEGRAM_TOKEN=<>"

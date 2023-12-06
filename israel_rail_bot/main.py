@@ -2,7 +2,7 @@ import logging
 import os
 
 from database import create_tables
-from rail_bot import start_bot
+from rail_bot import start_bot, start_sender_bot
 
 # https://israelrail.azurefd.net/rjpa-prod/api/v1/timetable/searchTrainLuzForDateTime?fromStation=4600&toStation=7300&date=2023-05-23&hour=16:30&scheduleType=1&systemType=1&language"id"="hebrew"
 
@@ -17,3 +17,4 @@ if __name__ == '__main__':
     create_tables()
 
     start_bot(TELEGRAM_BOT_TOKEN)
+    start_sender_bot(TELEGRAM_BOT_TOKEN)
