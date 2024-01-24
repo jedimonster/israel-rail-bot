@@ -46,7 +46,7 @@ DELETE_SUBSCRIPTION = 'DELETE_SUBSCRIPTION'
 CHECK_SUBSCRIPTION = 'CHECK_SUBSCRIPTION'
 SUB_ID = 'SUB_ID'
 
-bot = None
+application = None
 
 
 def next_state_is(state):
@@ -72,6 +72,7 @@ def start_sender_bot(token):
 
 
 def start_bot(token):
+    global application
     application = ApplicationBuilder().persistence(
         PicklePersistence(filepath='../bot_data.pickle')).arbitrary_callback_data(True).token(token).build()
 
@@ -257,8 +258,15 @@ async def select_departure_time(update: Update, context: ContextTypes.DEFAULT_TY
 
     time_by_hour = []
 
+    total_buttons = 0
+
     for hour, hourtimes in time_by_hour_iter:
-        time_by_hour.append(list(hourtimes))
+        hours_list = list(hourtimes)
+        total_buttons += len(hours_list)
+        if total_buttons < 100:
+            time_by_hour.append(hours_list)
+        else:
+            logging.warning("Exceeded 100 buttons in total (%s)", total_buttons)
 
     buttons = [[
         InlineKeyboardButton(
@@ -391,7 +399,7 @@ async def send_status_notification(chat_id, from_station, to_station, train_day:
         logging.info("Could not find the train from {} to {} day {} hour {} datetime {}", from_station, to_station,
                      train_day,
                      train_hour, train_datetime)
-        await bot.send_message(chat_id, "From: *{}*\n"
+        await application.bot.send_message(chat_id, "From: *{}*\n"
                                         "To: *{}*\n"
                                         "Departing at *{}* appears to be ❌ *CANCELED*".format(
             station_id_to_name(from_station), station_id_to_name(to_station), format_time_from_str(train_datetime)),
@@ -399,7 +407,7 @@ async def send_status_notification(chat_id, from_station, to_station, train_day:
         return
     response_txt = format_delay_response(train_times, train_datetime, from_station, to_station)
     logging.info("Sending delay notification to chat_id %s", chat_id)
-    await bot.send_message(chat_id, response_txt, parse_mode='MarkdownV2')
+    await application.bot.send_message(chat_id, response_txt, parse_mode='MarkdownV2')
 
 
 async def list_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE):

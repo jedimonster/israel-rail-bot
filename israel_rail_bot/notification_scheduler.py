@@ -2,6 +2,7 @@ import logging
 
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from date_utils import day_of_week_sunday_to_monday_index
 
 import rail_bot
 
@@ -22,7 +23,8 @@ def schedule_train_notification(chat_id: str, from_station: str, to_station: str
     context = {'chat_id': chat_id, 'from_station': from_station, 'to_station': to_station, 'train_day': day_of_week,
                'train_time': train_time}
 
-    job = scheduler.add_job(send_notification_for_specific_train_user, 'cron', day_of_week=day_of_week,
+    adjusted_day_of_week = day_of_week_sunday_to_monday_index(day_of_week)
+    job = scheduler.add_job(send_notification_for_specific_train_user, 'cron', day_of_week=adjusted_day_of_week,
                             hour=notification_hour, minute=notification_minute, kwargs=context)
 
     logging.info("Scheduled job %s", job)

@@ -10,4 +10,8 @@ def next_weekday(d: datetime.date, weekday: int):
     return d + datetime.timedelta(days_ahead)
 
 
+def day_of_week_sunday_to_monday_index(original_day: int):
+    return (original_day - 1) % 7
+
+
 WEEKDAYS = IntEnum("Weekdays", 'Sunday Monday Tuesday Wednesday Thursday Friday Saturday', start=0)
